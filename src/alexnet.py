@@ -221,6 +221,7 @@ def eval(alexnet: AlexNet, test_dataset, key: jt.PRNGKeyArray):
     total_samples = 0
 
     for x, y in test_dataset:
+        y = y.reshape(-1, 1)
         key, subkey = jax.random.split(key)
 
         # Get loss
