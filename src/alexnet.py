@@ -150,7 +150,7 @@ class AlexNet(eqx.Module):
         self.final = eqx.nn.Linear(in_features=4096, out_features=1, key=subkeys[7])
 
     def __call__(
-        self, x: jt.Float[jt.Array, "224 224 3"], key: jt.PRNGKeyArray
+        self, x: jt.Float[jt.Array, "3 224 224"], key: jt.PRNGKeyArray
     ) -> jt.Array:
         key, subkey = jax.random.split(key)
         x = self.conv1(x)
@@ -183,36 +183,36 @@ class AlexNet(eqx.Module):
         return x
 
 
-alexnet = AlexNet(key=jax.random.key(42))
-alexnet = eqx.filter_jit(alexnet)
-image = np.ones(shape=(4, 3, 224, 224)) / 1.0
-print(image.shape)
-o = eqx.filter_vmap(alexnet, in_axes=(0, None))(image, jax.random.key(1))
-print(o.shape)
-
-
-def loss_fn(alexnet: AlexNet, X, y, key) -> jt.Array:
+def loss_fn(
+    alexnet: AlexNet,
+    x: jt.Float[jt.Array, "batch_size 3 224 224"],
+    y: jt.Float[jt.Array, "batch_size 1"],
+    key: jt.PRNGKeyArray,
+) -> jt.Array:
     k, _ = jax.random.split(key)
-    o = eqx.filter_vmap(alexnet, in_axes=(0, None))(X, k)
-    loss = optax.sigmoid_binary_cross_entropy(o, y)
-    return jnp.mean(loss)
-
-
-learning_rate = 1e-3
-optimizer = optax.adam(learning_rate)
-opt_state = optimizer.init(eqx.filter(alexnet, eqx.is_array))
+    logits = eqx.filter_vmap(alexnet, in_axes=(0, None))(x, k)
+    loss = optax.sigmoid_binary_cross_entropy(logits, y)
+    return jnp.mean(loss), logits
 
 
 @eqx.filter_jit
-def step(alexnet, X, y, optimizer, opt_state, key):
-    print("JIT")
-    loss_value, grads = eqx.filter_value_and_grad(loss_fn)(alexnet, X, y, key)
+def step(
+    alexnet,
+    x: jt.Float[jt.Array, "batch_size 3 224 224"],
+    y: jt.Float[jt.Array, "batch_size 1"],
+    optimizer: optax.GradientTransformation,
+    opt_state: optax.OptState,
+    key: jt.PRNGKeyArray,
+):
+    (loss_value, logits), grads = eqx.filter_value_and_grad(loss_fn, has_aux=True)(
+        alexnet, x, y, key
+    )
     updates, opt_state = optimizer.update(grads, opt_state, alexnet)
     alexnet = eqx.apply_updates(alexnet, updates)
-    return alexnet, opt_state, loss_value
+    return alexnet, opt_state, loss_value, logits
 
 
-def eval(alexnet, test_dataset, key):
+def eval(alexnet: AlexNet, test_dataset, key: jt.PRNGKeyArray):
     """
     Evaluate model on test dataset, returning average loss and accuracy
     """
@@ -243,15 +243,40 @@ def eval(alexnet, test_dataset, key):
     return avg_loss, accuracy
 
 
+alexnet = AlexNet(key=jax.random.key(42))
+learning_rate = 0.0001
+optimizer = optax.adam(learning_rate)
+opt_state = optimizer.init(eqx.filter(alexnet, eqx.is_array))
+
 key = jax.random.key(99)
 n_epochs = 10
 for epoch in range(n_epochs):
+    batch_count = len(train_dataset)
     avg_train_loss = 0
-    for x, y in tqdm(train_dataset):
+    correct_predictions = 0
+    total_samples = 0
+
+    pbar = tqdm(enumerate(train_dataset), total=batch_count, desc=f"Epoch {epoch}")
+    for i, (x, y) in pbar:
+        y = y.reshape(-1, 1)
         key, subkey = jax.random.split(key)
-        alexnet, opt_state, loss = step(alexnet, x, y, optimizer, opt_state, key)
+        alexnet, opt_state, loss, logits = step(
+            alexnet, x, y, optimizer, opt_state, key
+        )
+
+        preds = (jax.nn.sigmoid(logits) > 0.5).astype(jnp.int32)
+        correct_predictions += jnp.sum(preds == y)
+        total_samples += len(y)
         avg_train_loss += loss
+
+        current_accuracy = correct_predictions / total_samples
+        pbar.set_postfix({"loss": f"{loss:.4f}", "acc": f"{current_accuracy:.4f}"})
+
     avg_train_loss /= len(train_dataset)
+    train_accuracy = correct_predictions / total_samples
+
     key, subkey = jax.random.split(key)
-    avg_eval_loss, acc = eval(alexnet, test_dataset, subkey)
-    print(f"Epoch {epoch}: {avg_eval_loss=}, {acc=}, {avg_train_loss=}")
+    test_loss, test_acc = eval(alexnet, test_dataset, subkey)
+    print(
+        f"Epoch {epoch}: train_loss={avg_train_loss:.4f}, train_acc={train_accuracy:.4f}, test_loss={test_loss:.4f}, test_acc={test_acc:.4f}"
+    )
