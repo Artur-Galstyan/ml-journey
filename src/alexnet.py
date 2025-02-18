@@ -249,7 +249,7 @@ for epoch in range(n_epochs):
     avg_train_loss = 0
     for x, y in tqdm(train_dataset):
         key, subkey = jax.random.split(key)
-        alexnet, opt_State, loss = step(alexnet, x, y, optimizer, opt_state, key)
+        alexnet, opt_state, loss = step(alexnet, x, y, optimizer, opt_state, key)
         avg_train_loss += loss
     avg_train_loss /= len(train_dataset)
     key, subkey = jax.random.split(key)
