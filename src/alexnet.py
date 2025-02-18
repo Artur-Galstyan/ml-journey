@@ -188,7 +188,7 @@ def loss_fn(
     x: jt.Float[jt.Array, "batch_size 3 224 224"],
     y: jt.Float[jt.Array, "batch_size 1"],
     key: jt.PRNGKeyArray,
-) -> jt.Array:
+) -> tuple[jt.Array, jt.Array]:
     k, _ = jax.random.split(key)
     logits = eqx.filter_vmap(alexnet, in_axes=(0, None))(x, k)
     loss = optax.sigmoid_binary_cross_entropy(logits, y)
