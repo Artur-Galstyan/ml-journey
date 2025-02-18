@@ -224,7 +224,7 @@ def eval(alexnet: AlexNet, test_dataset, key: jt.PRNGKeyArray):
         key, subkey = jax.random.split(key)
 
         # Get loss
-        loss = loss_fn(alexnet, x, y, subkey)
+        loss, _ = loss_fn(alexnet, x, y, subkey)
 
         # Get predictions
         preds = eqx.filter_vmap(alexnet, in_axes=(0, None))(x, subkey)
