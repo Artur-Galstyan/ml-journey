@@ -5,7 +5,7 @@ import jaxtyping as jt
 import numpy as np
 import optax
 import tensorflow as tf
-import torch
+from clu import metrics
 from tqdm import tqdm
 
 import tensorflow_datasets as tfds
@@ -212,37 +212,28 @@ def step(
     return alexnet, opt_state, loss_value, logits
 
 
-def eval(alexnet: AlexNet, test_dataset, key: jt.PRNGKeyArray):
-    """
-    Evaluate model on test dataset, returning average loss and accuracy
-    """
-    total_loss = 0
-    total_correct = 0
-    total_samples = 0
+class TrainMetrics(eqx.Module, metrics.Collection):
+    loss: metrics.Average.from_output("loss")  # pyright: ignore
+    accuracy: metrics.Accuracy
+
+
+def eval(alexnet: AlexNet, test_dataset, key: jt.PRNGKeyArray) -> TrainMetrics:
+    eval_metrics = TrainMetrics.empty()
 
     for x, y in test_dataset:
-        y = y.reshape(-1, 1)
+        y = y.reshape(-1)  # Make 1D for CLU
+        y = jnp.array(y, dtype=jnp.int32)
         key, subkey = jax.random.split(key)
+        loss, logits = loss_fn(alexnet, x, y.reshape(-1, 1), subkey)
+        logits = jnp.concatenate([-logits, logits], axis=1)
+        eval_metrics = eval_metrics.merge(
+            TrainMetrics.single_from_model_output(logits=logits, labels=y, loss=loss)
+        )
 
-        # Get loss
-        loss, _ = loss_fn(alexnet, x, y, subkey)
+    return eval_metrics
 
-        # Get predictions
-        preds = eqx.filter_vmap(alexnet, in_axes=(0, None))(x, subkey)
-        pred_classes = (jax.nn.sigmoid(preds) > 0.5).astype(jnp.int32)
-        correct = jnp.sum(pred_classes == y)
 
-        # Accumulate batch stats
-        batch_size = len(y)
-        total_loss += loss * batch_size
-        total_correct += correct
-        total_samples += batch_size
-
-    avg_loss = total_loss / total_samples
-    accuracy = total_correct / total_samples
-
-    return avg_loss, accuracy
-
+train_metrics = TrainMetrics.empty()
 
 alexnet = AlexNet(key=jax.random.key(42))
 learning_rate = 0.0001
@@ -251,33 +242,36 @@ opt_state = optimizer.init(eqx.filter(alexnet, eqx.is_array))
 
 key = jax.random.key(99)
 n_epochs = 10
+
+
 for epoch in range(n_epochs):
     batch_count = len(train_dataset)
-    avg_train_loss = 0
-    correct_predictions = 0
-    total_samples = 0
 
     pbar = tqdm(enumerate(train_dataset), total=batch_count, desc=f"Epoch {epoch}")
     for i, (x, y) in pbar:
         y = y.reshape(-1, 1)
+        y = jnp.array(y, dtype=jnp.int32)
         key, subkey = jax.random.split(key)
         alexnet, opt_state, loss, logits = step(
             alexnet, x, y, optimizer, opt_state, key
         )
+        logits = jnp.concatenate([-logits, logits], axis=1)
+        train_metrics = train_metrics.merge(
+            TrainMetrics.single_from_model_output(
+                logits=logits, labels=y.reshape(-1), loss=loss
+            )
+        )
 
-        preds = (jax.nn.sigmoid(logits) > 0.5).astype(jnp.int32)
-        correct_predictions += jnp.sum(preds == y)
-        total_samples += len(y)
-        avg_train_loss += loss
-
-        current_accuracy = correct_predictions / total_samples
-        pbar.set_postfix({"loss": f"{loss:.4f}", "acc": f"{current_accuracy:.4f}"})
-
-    avg_train_loss /= len(train_dataset)
-    train_accuracy = correct_predictions / total_samples
+        vals = train_metrics.compute()
+        pbar.set_postfix(
+            {"loss": f"{vals['loss']:.4f}", "acc": f"{vals['accuracy']:.4f}"}
+        )
 
     key, subkey = jax.random.split(key)
-    test_loss, test_acc = eval(alexnet, test_dataset, subkey)
+    eval_metrics = eval(alexnet, test_dataset, subkey)
+    evals = eval_metrics.compute()
     print(
-        f"Epoch {epoch}: train_loss={avg_train_loss:.4f}, train_acc={train_accuracy:.4f}, test_loss={test_loss:.4f}, test_acc={test_acc:.4f}"
+        f"Epoch {epoch}: "
+        f"test_loss={evals['loss']:.4f}, "
+        f"test_acc={evals['accuracy']:.4f}"
     )
