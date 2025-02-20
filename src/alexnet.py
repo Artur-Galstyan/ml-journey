@@ -74,15 +74,6 @@ class LocalResponseNormalization(eqx.Module):
         c, _, _ = x.shape
         p = jnp.pad(x, pad_width=[(self.n // 2, self.n // 2), (0, 0), (0, 0)])
 
-        # def _body(_, i):
-        #     window = jax.lax.dynamic_slice_in_dim(p, i, self.n) ** 2
-        #     d = (jnp.einsum("ijk->jk", window) * self.alpha + self.k) ** self.beta
-        #     b = x[i] / d
-        #     return _, b
-
-        # _, ys = jax.lax.scan(_body, None, jnp.arange(c))
-        # return ys
-
         def _body(i):
             window = jax.lax.dynamic_slice_in_dim(p, i, self.n) ** 2
             d = (jnp.einsum("ijk->jk", window) * self.alpha + self.k) ** self.beta
