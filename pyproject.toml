@@ -13,6 +13,7 @@ dependencies = [
     "jax>=0.4.35",
     "kaggle>=1.6.17",
     "keras>=3.8.0",
+    "marimo>=0.11.8",
     "matplotlib>=3.9.2",
     "optax>=0.2.4",
     "polars>=1.15.0",
@@ -20,5 +21,6 @@ dependencies = [
     "tensorflow-datasets>=4.9.7",
     "torch>=2.5.1",
     "tqdm>=4.67.1",
+    "treescope>=0.1.9",
     "wandb>=0.19.6",
 ]

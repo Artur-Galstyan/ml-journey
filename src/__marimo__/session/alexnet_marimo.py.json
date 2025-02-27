@@ -1,0 +1,207 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.11.9"
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "69ce0b91019048331974203e1cc1eb73",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<span class=\"markdown prose dark:prose-invert\"><div class=\"codehilite\"><pre><span></span><code>pip install tensorflow_datasets tensorflow jaxtyping equinox clu tqdm matplotlib optax\n</code></pre></div></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "b309386ccb75f3bef12d990c49de5067",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<span class=\"markdown prose dark:prose-invert\"><h2 id=\"0-getting-the-data\">0. Getting the Data</h2></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "191e0b4c6cc2e17a02ad8c066df1c6ff",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": null,
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "b60fc4ef777111354a8766bf7a2d13c2",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "tfds.core.DatasetInfo(\n    name='cats_vs_dogs',\n    full_name='cats_vs_dogs/4.0.1',\n    description=\"\"\"\n    A large set of images of cats and dogs. There are 1738 corrupted images that are dropped.\n    \"\"\",\n    homepage='https://www.microsoft.com/en-us/download/details.aspx?id=54765',\n    data_dir='/Users/arturgalstyan/tensorflow_datasets/cats_vs_dogs/4.0.1',\n    file_format=tfrecord,\n    download_size=Unknown size,\n    dataset_size=1.04 GiB,\n    features=FeaturesDict({\n        'image': Image(shape=(None, None, 3), dtype=uint8),\n        'image/filename': Text(shape=(), dtype=string),\n        'label': ClassLabel(shape=(), dtype=int64, num_classes=2),\n    }),\n    supervised_keys=('image', 'label'),\n    disable_shuffling=False,\n    splits={\n        'train': <SplitInfo num_examples=23262, num_shards=16>,\n    },\n    citation=\"\"\"@Inproceedings (Conference){asirra-a-captcha-that-exploits-interest-aligned-manual-image-categorization,\n    author = {Elson, Jeremy and Douceur, John (JD) and Howell, Jon and Saul, Jared},\n    title = {Asirra: A CAPTCHA that Exploits Interest-Aligned Manual Image Categorization},\n    booktitle = {Proceedings of 14th ACM Conference on Computer and Communications Security (CCS)},\n    year = {2007},\n    month = {October},\n    publisher = {Association for Computing Machinery, Inc.},\n    url = {https://www.microsoft.com/en-us/research/publication/asirra-a-captcha-that-exploits-interest-aligned-manual-image-categorization/},\n    edition = {Proceedings of 14th ACM Conference on Computer and Communications Security (CCS)},\n    }\"\"\",\n)\n"
+        }
+      ]
+    },
+    {
+      "id": "PKri",
+      "code_hash": "6798a5e16459290bfd26247134b5a01e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<figure style='display: flex; flex-direction: column;'><img src='./@file/263125-150928-t4aWszKl.png' style='width: 500px;height: 493px' /><figcaption style='color: var(--muted-foreground); text-align: center; margin-top: 0.5rem;'>Dog image.shape=TensorShape([493, 500, 3])</figcaption></figure>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "93c3894d8e4eff3433289f8303ab6b8f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "28fb7999129726ff5250718c5505155f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "64379ff9384a539521ef899eeb6693cb",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "e825ef6bfe8797e04629b8b1f4ff0dee",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "a05b625a245b2b6321a18cb0bbdc7e70",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "24ce0cfb243cf83bedd59e687124dc0e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "97b1d91faf054e78ed2651d8668041a1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "ec2e68aa60b94328823d852b674a9097",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "ca1152c76b744b0585fd3ada4e1cdd4d",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "638f70ecc9fb4bf04571b96161fb4607",
+      "outputs": [],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": null,
+      "outputs": [],
+      "console": []
+    }
+  ]
+}
