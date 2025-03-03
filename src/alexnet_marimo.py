@@ -1,34 +1,24 @@
+# pyright: ignore-file
+
 import marimo
 
-__generated_with = "0.11.9"
+__generated_with = "0.11.11"
 app = marimo.App(width="medium", css_file="hide.css")
 
 
 @app.cell
-def _(mo):
-    mo.md(
-        r"""
-        ```
-        pip install tensorflow_datasets tensorflow jaxtyping equinox clu tqdm matplotlib optax
-        ```
-        """
-    )
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(r"""## 0. Getting the Data""")
+def _():
+    # pip install tensorflow_datasets tensorflow jaxtyping equinox clu tqdm matplotlib optax jax
     return
 
 
 @app.cell
 def _():
-    import marimo as mo
     import equinox as eqx
     import jax
     import jax.numpy as jnp
     import jaxtyping as jt
+    import marimo as mo
     import numpy as np
     import optax
     import tensorflow as tf
@@ -47,7 +37,7 @@ def _(tfds):
         split=("train[:80%]", "train[80%:]"),
         with_info=True,
         as_supervised=True,
-    )  # pyright:ignore
+    )
 
     print(info)
     return info, test, train
@@ -55,15 +45,15 @@ def _(tfds):
 
 @app.cell
 def _(mo, train):
-    first_row = list(train.take(10))[2]
-    image, label = first_row
+    row = list(train.take(10))[2]
+    image, label = row
     mo.image(
         image,
         caption=("Dog" if label == 1 else "Cat") + f" {image.shape=}",
         height=image.shape[0],
         width=image.shape[1],
     )
-    return first_row, image, label
+    return image, label, row
 
 
 @app.cell
@@ -75,7 +65,8 @@ def _():
 @app.cell
 def _(jt, tf):
     def normalize(
-        image: jt.Float[tf.Tensor, "h w c"], label: jt.Int[tf.Tensor, ""]
+        image: jt.Float[tf.Tensor, "h w c"],
+        label: jt.Int[tf.Tensor, ""],
     ) -> tuple[jt.Float[tf.Tensor, "h w c"], jt.Int[tf.Tensor, ""]]:
         image = tf.divide(tf.cast(image, tf.float32), 255.0)
         assert isinstance(image, tf.Tensor)
@@ -105,7 +96,6 @@ def _(normalize, resize, test, tf, tfds, train):
             .prefetch(tf.data.AUTOTUNE)
         )
     )
-
 
     test_dataset = tfds.as_numpy(
         (
@@ -141,7 +131,7 @@ def _(eqx, jax, jnp, jt):
             def _body(i):
                 window = jax.lax.dynamic_slice_in_dim(p, i, self.n) ** 2
                 d = (
-                    jnp.einsum("ijk->jk", window) * self.alpha + self.k
+                    jnp.einsum("chw->hw", window) * self.alpha + self.k
                 ) ** self.beta
                 b = x[i] / d
                 return b
