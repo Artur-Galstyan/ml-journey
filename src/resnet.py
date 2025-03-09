@@ -295,8 +295,6 @@ class ResNet(eqx.Module):
         self.avg = eqx.nn.AdaptiveAvgPool2d(target_shape=(1, 1))
         self.fc = eqx.nn.Linear(512 * block.expansion, n_classes, key=subkeys[-1])
 
-        # todo: init weights using kaiming normal
-
         if zero_init_residual:
             # todo: init last bn layer with zero weights
             pass
@@ -394,7 +392,8 @@ class ResNet(eqx.Module):
 
 
 def resnet18(key: jt.PRNGKeyArray, n_classes=1000) -> tuple[ResNet, eqx.nn.State]:
-    return eqx.nn.make_with_state(ResNet)(
+    key, subkey = jax.random.split(key)
+    resnet, state = eqx.nn.make_with_state(ResNet)(
         BasicBlock,
         [2, 2, 2, 2],
         n_classes,
@@ -404,6 +403,20 @@ def resnet18(key: jt.PRNGKeyArray, n_classes=1000) -> tuple[ResNet, eqx.nn.State
         replace_stride_with_dilation=None,
         key=key,
     )
+
+    # initializer = jax.nn.initializers.he_normal()
+    # is_conv2d = lambda x: isinstance(x, eqx.nn.Conv2d)
+    # get_weights = lambda m: [
+    #     x.weight for x in jax.tree.leaves(m, is_leaf=is_conv2d) if is_conv2d(x)
+    # ]
+    # weights = get_weights(resnet)
+    # new_weights = [
+    #     initializer(subkey, weight.shape, jnp.float32)
+    #     for weight, subkey in zip(weights, jax.random.split(key, len(weights)))
+    # ]
+    # resnet = eqx.tree_at(get_weights, resnet, new_weights)
+
+    return resnet, state
 
 
 def resnet34(key: jt.PRNGKeyArray, n_classes=1000) -> tuple[ResNet, eqx.nn.State]:
@@ -533,12 +546,6 @@ def wide_resnet101_2(
     )
 
 
-image = jnp.ones(shape=(1, 3, 32, 32))
-
-r, state = resnet18(key=jax.random.key(0), n_classes=10)
-o, state = eqx.filter_vmap(r, axis_name="batch", in_axes=(0, None))(image, state)
-print(o.shape)
-
 (train, test), info = tfds.load(
     "cifar10", split=["train", "test"], with_info=True, as_supervised=True
 )
@@ -547,15 +554,34 @@ print(o.shape)
 def preprocess(
     img: jt.Float[tf.Tensor, "h w c"], label: jt.Int[tf.Tensor, ""]
 ) -> tuple[jt.Float[tf.Tensor, "h w c"], jt.Int[tf.Tensor, "1 n_classes"]]:
-    img = tf.divide(tf.cast(img, tf.float32), 255.0)
+    # Convert to float and normalize to [0, 1]
+    img = tf.cast(img, tf.float32) / 255.0  # pyright: ignore
+
+    mean = tf.constant([0.4914, 0.4822, 0.4465])
+    std = tf.constant([0.2470, 0.2435, 0.2616])
+    img = (img - mean) / std  # pyright: ignore
+
     img = tf.transpose(img, perm=[2, 0, 1])
+
     label = tf.one_hot(label, depth=10)
+
     return img, label
 
 
-train_dataset = train.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
+# For training data, add data augmentation
+def preprocess_train(
+    img: jt.Float[tf.Tensor, "h w c"], label: jt.Int[tf.Tensor, ""]
+) -> tuple[jt.Float[tf.Tensor, "h w c"], jt.Int[tf.Tensor, "1 n_classes"]]:
+    img = tf.pad(img, [[4, 4], [4, 4], [0, 0]], mode="REFLECT")
+    img = tf.image.random_crop(img, [32, 32, 3])
+    img = tf.image.random_flip_left_right(img)  # pyright: ignore
+
+    return preprocess(img, label)
+
+
+train_dataset = train.map(preprocess_train, num_parallel_calls=tf.data.AUTOTUNE)
 SHUFFLE_VAL = len(train_dataset) // 1000
-BATCH_SIZE = 4
+BATCH_SIZE = 128
 train_dataset = train_dataset.shuffle(SHUFFLE_VAL)
 train_dataset = train_dataset.batch(BATCH_SIZE)
 train_dataset = train_dataset.prefetch(tf.data.AUTOTUNE)
@@ -607,12 +633,13 @@ def eval(
     resnet: ResNet, state: eqx.nn.State, test_dataset, key: jt.PRNGKeyArray
 ) -> tuple[TrainMetrics, eqx.nn.State]:
     eval_metrics = TrainMetrics.empty()
-
     for x, y in test_dataset:
         y = jnp.array(y, dtype=jnp.int32)
-        loss, (logits, state) = loss_fn(resnet, x, y.reshape(-1, 1), state)
+        loss, (logits, state) = loss_fn(resnet, x, y, state)
         eval_metrics = eval_metrics.merge(
-            TrainMetrics.single_from_model_output(logits=logits, labels=y, loss=loss)
+            TrainMetrics.single_from_model_output(
+                logits=logits, labels=jnp.argmax(y, axis=1), loss=loss
+            )
         )
 
     return eval_metrics, state
@@ -621,12 +648,32 @@ def eval(
 train_metrics = TrainMetrics.empty()
 
 resnet, state = resnet18(key=jax.random.key(0), n_classes=10)
-learning_rate = 0.0001
-optimizer = optax.adam(learning_rate)
+
+resnet, state = resnet18(key=jax.random.key(0), n_classes=10)
+
+learning_rate = 0.001
+weight_decay = 5e-4
+optimizer = optax.chain(
+    optax.clip_by_global_norm(1.0),
+    optax.add_decayed_weights(weight_decay),
+    optax.sgd(learning_rate, momentum=0.9),
+)
+
+# Add learning rate scheduler
+scheduler = optax.exponential_decay(
+    init_value=learning_rate,
+    transition_steps=2000,  # Adjust based on dataset size
+    decay_rate=0.1,
+    end_value=1e-6,
+)
+optimizer = optax.chain(
+    optax.add_decayed_weights(weight_decay), optax.sgd(scheduler, momentum=0.9)
+)
+
 opt_state = optimizer.init(eqx.filter(resnet, eqx.is_array))
 
 key = jax.random.key(99)
-n_epochs = 10
+n_epochs = 100
 
 
 for epoch in range(n_epochs):
@@ -638,10 +685,9 @@ for epoch in range(n_epochs):
         resnet, state, opt_state, loss, logits = step(
             resnet, state, x, y, optimizer, opt_state
         )
-
         train_metrics = train_metrics.merge(
             TrainMetrics.single_from_model_output(
-                logits=logits, labels=y.reshape(-1), loss=loss
+                logits=logits, labels=jnp.argmax(y, axis=1), loss=loss
             )
         )
 
