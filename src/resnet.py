@@ -546,9 +546,10 @@ print(o.shape)
 
 def preprocess(
     img: jt.Float[tf.Tensor, "h w c"], label: jt.Int[tf.Tensor, ""]
-) -> tuple[jt.Float[tf.Tensor, "h w c"], jt.Int[tf.Tensor, ""]]:
+) -> tuple[jt.Float[tf.Tensor, "h w c"], jt.Int[tf.Tensor, "1 n_classes"]]:
     img = tf.divide(tf.cast(img, tf.float32), 255.0)
     img = tf.transpose(img, perm=[2, 0, 1])
+    label = tf.one_hot(label, depth=10)
     return img, label
 
 
@@ -608,11 +609,8 @@ def eval(
     eval_metrics = TrainMetrics.empty()
 
     for x, y in test_dataset:
-        y = y.reshape(-1)  # Make 1D for CLU
         y = jnp.array(y, dtype=jnp.int32)
-        key, subkey = jax.random.split(key)
-        loss, (logits, state) = loss_fn(resnet, x, y.reshape(-1, 1), subkey)
-        logits = jnp.concatenate([-logits, logits], axis=1)
+        loss, (logits, state) = loss_fn(resnet, x, y.reshape(-1, 1), state)
         eval_metrics = eval_metrics.merge(
             TrainMetrics.single_from_model_output(logits=logits, labels=y, loss=loss)
         )
@@ -636,12 +634,11 @@ for epoch in range(n_epochs):
 
     pbar = tqdm(enumerate(train_dataset), total=batch_count, desc=f"Epoch {epoch}")
     for i, (x, y) in pbar:
-        y = y.reshape(-1, 1)
         y = jnp.array(y, dtype=jnp.int32)
         resnet, state, opt_state, loss, logits = step(
             resnet, state, x, y, optimizer, opt_state
         )
-        logits = jnp.concatenate([-logits, logits], axis=1)
+
         train_metrics = train_metrics.merge(
             TrainMetrics.single_from_model_output(
                 logits=logits, labels=y.reshape(-1), loss=loss
@@ -652,7 +649,6 @@ for epoch in range(n_epochs):
         pbar.set_postfix(
             {"loss": f"{vals['loss']:.4f}", "acc": f"{vals['accuracy']:.4f}"}
         )
-
     key, subkey = jax.random.split(key)
     eval_metrics, state = eval(resnet, state, test_dataset, subkey)
     evals = eval_metrics.compute()
