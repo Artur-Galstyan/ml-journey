@@ -172,7 +172,7 @@ class BasicBlock(eqx.Module):
             use_bias=False,
             key=subkeys[1],
         )
-        self.bn2 = BatchNorm(input_size=out_channels, axis_name="batch")
+        self.bn2 = BatchNorm(size=out_channels, axis_name="batch")
 
         self.downsample = downsample
 
