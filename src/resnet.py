@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any, ClassVar, Type
+from typing import Any, ClassVar, Hashable, Sequence, Type
 
 import equinox as eqx
 import jax
@@ -12,15 +12,93 @@ import torch
 import torch.nn as nn
 from clu import metrics
 from equinox.nn import State
+from jaxtyping import Array, Float, PRNGKeyArray
 from torch import Tensor
 from tqdm import tqdm
 
 import tensorflow_datasets as tfds
 
 
+class BatchNorm(eqx.Module):
+    state_index: eqx.nn.StateIndex
+
+    gamma: Float[Array, "size"] | None
+    beta: Float[Array, "size"] | None
+
+    inference: bool
+    axis_name: Hashable | Sequence[Hashable]
+
+    size: int = eqx.field(static=True)
+    eps: float = eqx.field(static=True)
+    momentum: float = eqx.field(static=True)
+    affine: bool = eqx.field(static=True)
+
+    def __init__(
+        self,
+        size: int,
+        axis_name: Hashable | Sequence[Hashable],
+        eps: float = 1e-5,
+        momentum: float = 0.1,
+        affine: bool = True,
+        inference: bool = False,
+    ):
+        self.size = size
+        self.eps = eps
+        self.momentum = momentum
+        self.affine = affine
+        self.inference = inference
+        self.axis_name = axis_name
+
+        self.gamma = jnp.ones(self.size) if self.affine else None
+        self.beta = jnp.zeros(self.size) if self.affine else None
+
+        self.state_index = eqx.nn.StateIndex((jnp.zeros(size), jnp.ones(size)))
+
+    def __call__(
+        self,
+        x: Array,
+        state: State,
+        *,
+        key: PRNGKeyArray | None = None,
+        inference: bool | None = None,
+    ) -> tuple[Array, State]:
+        if inference is None:
+            inference = self.inference
+
+        running_mean, running_var = state.get(self.state_index)
+
+        batch_mean = jax.lax.pmean(x, axis_name=self.axis_name)
+        batch_size = jax.lax.psum(1, axis_name=self.axis_name)
+
+        if inference:
+            x_normalized = (x - running_mean) / jnp.sqrt(running_var + self.eps)
+        else:
+            xmu = x - batch_mean
+            sq = xmu**2
+            batch_var = jax.lax.pmean(sq, axis_name=self.axis_name)
+            std = jnp.sqrt(batch_var + self.eps)
+            x_normalized = xmu / std
+
+            correction_factor = batch_size / jnp.maximum(batch_size - 1, 1)
+            running_mean = (
+                1 - self.momentum
+            ) * running_mean + self.momentum * batch_mean
+            running_var = (1 - self.momentum) * running_var + self.momentum * (
+                batch_var * correction_factor
+            )
+
+            state = state.set(self.state_index, (running_mean, running_var))
+
+        out = x_normalized
+        if self.affine and self.gamma is not None and self.beta is not None:
+            out = self.gamma * x_normalized + self.beta
+
+        return out, state
+
+
 class Downsample(eqx.Module):
     conv: eqx.nn.Conv2d
-    bn: eqx.nn.BatchNorm
+    bn: BatchNorm
 
     def __init__(
         self,
@@ -39,7 +117,7 @@ class Downsample(eqx.Module):
             key=subkey,
         )
 
-        self.bn = eqx.nn.BatchNorm(out_channels, axis_name="batch")
+        self.bn = BatchNorm(out_channels, axis_name="batch")
 
     def __call__(
         self, x: jt.Float[jt.Array, "c_in h w"], state: eqx.nn.State
@@ -51,14 +129,15 @@ class Downsample(eqx.Module):
 
 
 class BasicBlock(eqx.Module):
-    expansion: int = eqx.field(static=True, default=1)
     downsample: Downsample | None
 
     conv1: eqx.nn.Conv2d
-    bn1: eqx.nn.BatchNorm
+    bn1: BatchNorm
 
     conv2: eqx.nn.Conv2d
-    bn2: eqx.nn.BatchNorm
+    bn2: BatchNorm
+
+    expansion: int = eqx.field(static=True, default=1)
 
     def __init__(
         self,
@@ -82,7 +161,7 @@ class BasicBlock(eqx.Module):
             use_bias=False,
             key=subkeys[0],
         )
-        self.bn1 = eqx.nn.BatchNorm(input_size=out_channels, axis_name="batch")
+        self.bn1 = BatchNorm(size=out_channels, axis_name="batch")
 
         self.conv2 = eqx.nn.Conv2d(
             out_channels,
@@ -93,7 +172,7 @@ class BasicBlock(eqx.Module):
             use_bias=False,
             key=subkeys[1],
         )
-        self.bn2 = eqx.nn.BatchNorm(input_size=out_channels, axis_name="batch")
+        self.bn2 = BatchNorm(input_size=out_channels, axis_name="batch")
 
         self.downsample = downsample
 
@@ -118,17 +197,18 @@ class BasicBlock(eqx.Module):
 
 
 class Bottleneck(eqx.Module):
-    expansion: int = eqx.field(static=True, default=4)
     downsample: Downsample | None
 
     conv1: eqx.nn.Conv2d
-    bn1: eqx.nn.BatchNorm
+    bn1: BatchNorm
 
     conv2: eqx.nn.Conv2d
-    bn2: eqx.nn.BatchNorm
+    bn2: BatchNorm
 
     conv3: eqx.nn.Conv2d
-    bn3: eqx.nn.BatchNorm
+    bn3: BatchNorm
+
+    expansion: int = eqx.field(static=True, default=4)
 
     def __init__(
         self,
@@ -147,7 +227,7 @@ class Bottleneck(eqx.Module):
         self.conv1 = eqx.nn.Conv2d(
             in_channels, width, kernel_size=1, use_bias=False, key=subkeys[0]
         )
-        self.bn1 = eqx.nn.BatchNorm(width, axis_name="batch")
+        self.bn1 = BatchNorm(width, axis_name="batch")
 
         self.conv2 = eqx.nn.Conv2d(
             width,
@@ -161,7 +241,7 @@ class Bottleneck(eqx.Module):
             key=subkeys[1],
         )
 
-        self.bn2 = eqx.nn.BatchNorm(width, axis_name="batch")
+        self.bn2 = BatchNorm(width, axis_name="batch")
 
         self.conv3 = eqx.nn.Conv2d(
             width,
@@ -171,7 +251,7 @@ class Bottleneck(eqx.Module):
             use_bias=False,
         )
 
-        self.bn3 = eqx.nn.BatchNorm(out_channels * self.expansion, axis_name="batch")
+        self.bn3 = BatchNorm(out_channels * self.expansion, axis_name="batch")
 
         self.downsample = downsample
 
@@ -200,11 +280,8 @@ class Bottleneck(eqx.Module):
 
 
 class ResNet(eqx.Module):
-    running_internal_channels: int = eqx.field(static=True)
-    dilation: int = eqx.field(static=True)
-
     conv1: eqx.nn.Conv2d
-    bn: eqx.nn.BatchNorm
+    bn: BatchNorm
     mp: eqx.nn.MaxPool2d
 
     layer1: list[BasicBlock | Bottleneck]
@@ -214,6 +291,9 @@ class ResNet(eqx.Module):
 
     avg: eqx.nn.AdaptiveAvgPool2d
     fc: eqx.nn.Linear
+
+    running_internal_channels: int = eqx.field(static=True, default=64)
+    dilation: int = eqx.field(static=True, default=1)
 
     def __init__(
         self,
@@ -228,8 +308,6 @@ class ResNet(eqx.Module):
         input_channels: int = 3,
     ):
         key, *subkeys = jax.random.split(key, 10)
-        self.running_internal_channels = 64
-        self.dilation = 1
 
         if replace_stride_with_dilation is None:
             replace_stride_with_dilation = [False, False, False]
@@ -248,7 +326,7 @@ class ResNet(eqx.Module):
             key=subkeys[0],
         )
 
-        self.bn = eqx.nn.BatchNorm(self.running_internal_channels, axis_name="batch")
+        self.bn = BatchNorm(self.running_internal_channels, axis_name="batch")
         self.mp = eqx.nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         self.layer1 = self._make_layer(

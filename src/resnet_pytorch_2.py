@@ -29,7 +29,7 @@ print(f"Using device: {device}")
 
 # Hyperparameters
 num_epochs = 200
-batch_size = 128
+batch_size = 8
 learning_rate = 0.1
 momentum = 0.9
 weight_decay = 5e-4

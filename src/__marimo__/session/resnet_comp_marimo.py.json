@@ -1,0 +1,265 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.11.17"
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "c29a51ad17fc6711295493b35fb9a527",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nZfS",
+      "code_hash": "7b5c4cf8f70363c6292e2fd68e0453c2",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "mdLZ",
+      "code_hash": "644a4dcedc7d827647a1f00d8a0a8cd0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "OpHD",
+      "code_hash": "5ce1561c9d4a46b91af1270f9092da7d",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "skiV",
+      "code_hash": "b046f37d180c3fc15250c08de9d6d5c1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "INITIALISING BASIC BLOCK WITH THESE PARAMETERS:\ninplanes: 64\nplanes: 64\nstride: 1\ndownsample: None\ngroups: 1\nbase_width: 64\ndilation: 1\nnorm_layer: None\ntorch.Size([64, 64, 3, 3])\ntorch.Size([64, 64, 3, 3])\ntorch.Size([64])\ntorch.Size([64])\n"
+        }
+      ]
+    },
+    {
+      "id": "fPGY",
+      "code_hash": "9035ab4a0d3b95e108f3633c7c4144fc",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "OWdc",
+      "code_hash": "5e1f54318c06b36252173b49a21c3a3a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "hdGX",
+      "code_hash": "7beff158aa74d93a5af99782c88a15d0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "4\n"
+        }
+      ]
+    },
+    {
+      "id": "uzOn",
+      "code_hash": "b260889dd87fceda9e390c197302f3b3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RUDU",
+      "code_hash": "289cc9c922ce61b26f7ee1d55f9c9a82",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vufV",
+      "code_hash": "dd7b5a287905948158a569576480b55b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "zpYW",
+      "code_hash": "9c8167cdf639f43584bbf696cf9e4f8b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "TORCHBasicBlock I: torch.Size([4, 64, 8, 8])\nTORCHBasicBlock O: torch.Size([4, 64, 8, 8])\n"
+        }
+      ]
+    },
+    {
+      "id": "fzbN",
+      "code_hash": "88810f38904b99360d670ac3920ff85a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "eWVY",
+      "code_hash": "4dae09c43d2b0f3571e68fc1567d2fd8",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nnke",
+      "code_hash": "45ef6a71c061ac248ef29cab8f3d12eb",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "True (64, 64, 3, 3) torch.Size([64, 64, 3, 3])\nTrue (64,) torch.Size([64])\nTrue (64, 64, 3, 3) torch.Size([64, 64, 3, 3])\nFalse (64,) torch.Size([64, 64, 3, 3])\n"
+        }
+      ]
+    },
+    {
+      "id": "yLpw",
+      "code_hash": "966d8d2db27864ba877ba2bc792bedf2",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "(64, 64, 3, 3) torch.Size([64, 64, 3, 3])\n(64,) torch.Size([64])\n(64, 64, 3, 3) torch.Size([64, 64, 3, 3])\n(64,) torch.Size([64])\n"
+        }
+      ]
+    },
+    {
+      "id": "vrqs",
+      "code_hash": "5fb50436bb6b0b86b1b0c0ac69cb56ab",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stdout",
+          "text": "TORCHBasicBlock I: torch.Size([4, 64, 8, 8])\nTORCHBasicBlock O: torch.Size([4, 64, 8, 8])\n"
+        }
+      ]
+    }
+  ]
+}

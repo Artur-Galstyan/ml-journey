@@ -81,6 +81,16 @@ class BasicBlock(nn.Module):
         norm_layer: Callable[..., nn.Module] | None = None,
     ) -> None:
         super().__init__()
+        print("INITIALISING BASIC BLOCK WITH THESE PARAMETERS:")
+        print("inplanes:", inplanes)
+        print("planes:", planes)
+        print("stride:", stride)
+        print("downsample:", downsample)
+        print("groups:", groups)
+        print("base_width:", base_width)
+        print("dilation:", dilation)
+        print("norm_layer:", norm_layer)
+
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         if groups != 1 or base_width != 64:
@@ -138,6 +148,15 @@ class Bottleneck(nn.Module):
         norm_layer: Callable[..., nn.Module] | None = None,
     ) -> None:
         super().__init__()
+        print("INITIALISING BOTTLENECK BLOCK WITH THESE PARAMETERS:")
+        print("inplanes:", inplanes)
+        print("planes:", planes)
+        print("stride:", stride)
+        print("downsample:", downsample)
+        print("groups:", groups)
+        print("base_width:", base_width)
+        print("dilation:", dilation)
+        print("norm_layer:", norm_layer)
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         width = int(planes * (base_width / 64.0)) * groups
@@ -370,14 +389,15 @@ def wide_resnet101_2(**kwargs: Any) -> ResNet:
     return _resnet(Bottleneck, [3, 4, 23, 3], **kwargs)
 
 
-# r = resnet50(num_classes=10)
+# r = resnet18(num_classes=10)
+r = resnet50(num_classes=10)
 # r = resnet101(num_classes=10)
 # r = resnet152(num_classes=10)
 # r = resnext50_32x4d(num_classes=10)
 # r = resnext101_32x8d(num_classes=10)
 # r = resnext101_64x4d(num_classes=10)
 # r = wide_resnet50_2(num_classes=10)
-r = wide_resnet101_2(num_classes=10)
+# r = wide_resnet101_2(num_classes=10)
 
 for x, y in train_dataset:
     # print(x.shape, y, y.shape)
