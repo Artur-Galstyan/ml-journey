@@ -29,7 +29,7 @@ print(f"Using device: {device}")
 
 # Hyperparameters
 num_epochs = 200
-batch_size = 8
+batch_size = 128
 learning_rate = 0.1
 momentum = 0.9
 weight_decay = 5e-4
@@ -41,15 +41,17 @@ cifar10_std = [0.2470, 0.2435, 0.2616]
 # Data augmentation and normalization
 train_transform = transforms.Compose(
     [
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
+        # transforms.RandomCrop(32, padding=4),
+        # transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        transforms.Normalize(cifar10_mean, cifar10_std),
+        # transforms.Normalize(cifar10_mean, cifar10_std),
     ]
 )
 
 test_transform = transforms.Compose(
-    [transforms.ToTensor(), transforms.Normalize(cifar10_mean, cifar10_std)]
+    [
+        transforms.ToTensor(),  # transforms.Normalize(cifar10_mean, cifar10_std),
+    ]
 )
 
 # Load CIFAR-10 dataset
@@ -114,13 +116,14 @@ model = create_resnet18_cifar().to(device)
 # Loss and optimizer
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(
-    model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=weight_decay
+    model.parameters(),
+    lr=learning_rate,  # momentum=momentum, weight_decay=weight_decay
 )
 
 # Learning rate scheduler (reduce on plateau)
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer, mode="max", factor=0.1, patience=10
-)
+# scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+#     optimizer, mode="max", factor=0.1, patience=10
+# )
 
 # For storing metrics
 train_loss_history = []
@@ -204,7 +207,7 @@ def main():
         test_loss, test_acc = evaluate()
 
         # Update learning rate scheduler
-        scheduler.step(test_acc)
+        # scheduler.step(test_acc)
 
         # Save metrics
         train_loss_history.append(train_loss)

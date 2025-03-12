@@ -1,3 +1,5 @@
+import multiprocessing
+import time
 from collections.abc import Callable
 from typing import Any, ClassVar, Type
 
@@ -5,14 +7,19 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jaxtyping as jt
+import matplotlib.pyplot as plt
 import numpy as np
 import optax
 import tensorflow as tf
 import torch
 import torch.nn as nn
+import torch.optim as optim
+import torchvision
+import torchvision.transforms as transforms
 from clu import metrics
 from equinox.nn import State
 from torch import Tensor
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import tensorflow_datasets as tfds
@@ -20,6 +27,11 @@ import tensorflow_datasets as tfds
 (train, test), info = tfds.load(
     "cifar10", split=["train", "test"], with_info=True, as_supervised=True
 )
+
+# Add multiprocessing safety for macOS
+if __name__ == "__main__":
+    # This fixes the multiprocessing issue on macOS
+    multiprocessing.set_start_method("spawn", force=True)
 
 
 def preprocess(
@@ -32,7 +44,7 @@ def preprocess(
 
 train_dataset = train.map(preprocess, num_parallel_calls=tf.data.AUTOTUNE)
 SHUFFLE_VAL = len(train_dataset) // 1000
-BATCH_SIZE = 4
+BATCH_SIZE = 128
 train_dataset = train_dataset.shuffle(SHUFFLE_VAL)
 train_dataset = train_dataset.batch(BATCH_SIZE)
 train_dataset = train_dataset.prefetch(tf.data.AUTOTUNE)
@@ -81,16 +93,6 @@ class BasicBlock(nn.Module):
         norm_layer: Callable[..., nn.Module] | None = None,
     ) -> None:
         super().__init__()
-        print("INITIALISING BASIC BLOCK WITH THESE PARAMETERS:")
-        print("inplanes:", inplanes)
-        print("planes:", planes)
-        print("stride:", stride)
-        print("downsample:", downsample)
-        print("groups:", groups)
-        print("base_width:", base_width)
-        print("dilation:", dilation)
-        print("norm_layer:", norm_layer)
-
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         if groups != 1 or base_width != 64:
@@ -107,7 +109,7 @@ class BasicBlock(nn.Module):
         self.stride = stride
 
     def forward(self, x: Tensor) -> Tensor:
-        print(self.__class__.__name__, f"I: {x.shape}")
+        # print(self.__class__.__name__, f"I: {x.shape}")
         identity = x
 
         out = self.conv1(x)
@@ -123,7 +125,7 @@ class BasicBlock(nn.Module):
         out += identity
         out = self.relu(out)
 
-        print(self.__class__.__name__, f"O: {out.shape}")
+        # print(self.__class__.__name__, f"O: {out.shape}")
         return out
 
 
@@ -148,15 +150,6 @@ class Bottleneck(nn.Module):
         norm_layer: Callable[..., nn.Module] | None = None,
     ) -> None:
         super().__init__()
-        print("INITIALISING BOTTLENECK BLOCK WITH THESE PARAMETERS:")
-        print("inplanes:", inplanes)
-        print("planes:", planes)
-        print("stride:", stride)
-        print("downsample:", downsample)
-        print("groups:", groups)
-        print("base_width:", base_width)
-        print("dilation:", dilation)
-        print("norm_layer:", norm_layer)
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         width = int(planes * (base_width / 64.0)) * groups
@@ -172,7 +165,7 @@ class Bottleneck(nn.Module):
         self.stride = stride
 
     def forward(self, x: Tensor) -> Tensor:
-        print(self.__class__.__name__, f"I: {x.shape}")
+        # print(self.__class__.__name__, f"I: {x.shape}")
         identity = x
 
         out = self.conv1(x)
@@ -192,7 +185,7 @@ class Bottleneck(nn.Module):
         out += identity
         out = self.relu(out)
 
-        print(self.__class__.__name__, f"O: {out.shape}")
+        # print(self.__class__.__name__, f"O: {out.shape}")
         return out
 
 
@@ -312,7 +305,7 @@ class ResNet(nn.Module):
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         # See note [TorchScript super()]
-        print(self.__class__.__name__, f"I: {x.shape}")
+        # print(self.__class__.__name__, f"I: {x.shape}")
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -327,7 +320,7 @@ class ResNet(nn.Module):
         x = torch.flatten(x, 1)
         x = self.fc(x)
 
-        print(self.__class__.__name__, f"O: {x.shape}")
+        # print(self.__class__.__name__, f"O: {x.shape}")
         return x
 
     def forward(self, x: Tensor) -> Tensor:
@@ -389,8 +382,7 @@ def wide_resnet101_2(**kwargs: Any) -> ResNet:
     return _resnet(Bottleneck, [3, 4, 23, 3], **kwargs)
 
 
-# r = resnet18(num_classes=10)
-r = resnet50(num_classes=10)
+# r = resnet50(num_classes=10)
 # r = resnet101(num_classes=10)
 # r = resnet152(num_classes=10)
 # r = resnext50_32x4d(num_classes=10)
@@ -399,8 +391,189 @@ r = resnet50(num_classes=10)
 # r = wide_resnet50_2(num_classes=10)
 # r = wide_resnet101_2(num_classes=10)
 
-for x, y in train_dataset:
-    # print(x.shape, y, y.shape)
-    o = r.forward(torch.Tensor(x))
-    print(o.shape)
-    break
+# Set random seed for reproducibility
+torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(42)
+    torch.backends.cudnn.deterministic = True
+
+# Device configuration
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+
+# Create modified ResNet-18 model for CIFAR-10
+def create_resnet18_cifar():
+    model = resnet18()
+
+    # # Modify the first convolutional layer for CIFAR-10
+    # model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+
+    # # Remove the max pooling layer
+    # model.maxpool = nn.Identity()
+
+    # Adjust the final fully connected layer
+    model.fc = nn.Linear(model.fc.in_features, 10)
+
+    return model
+
+
+# Hyperparameters
+num_epochs = 200
+batch_size = 128
+learning_rate = 0.1
+momentum = 0.9
+weight_decay = 5e-4
+
+# Initialize model
+model = create_resnet18_cifar().to(device)
+
+# Loss and optimizer
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.SGD(
+    model.parameters(),
+    lr=learning_rate,  # momentum=momentum, weight_decay=weight_decay
+)
+
+# Learning rate scheduler (reduce on plateau)
+# scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+#     optimizer, mode="max", factor=0.1, patience=10
+# )
+
+# For storing metrics
+train_loss_history = []
+train_acc_history = []
+test_loss_history = []
+test_acc_history = []
+
+
+# Training function
+def train_epoch():
+    model.train()
+    running_loss = 0.0
+    correct = 0
+    total = 0
+
+    for i, (images, labels) in enumerate(train_dataset):
+        images, labels = (
+            torch.from_numpy(images).to(device),
+            torch.from_numpy(labels).to(device),
+        )
+
+        # Zero the parameter gradients
+        optimizer.zero_grad()
+
+        # Forward pass
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+
+        # Backward and optimize
+        loss.backward()
+        optimizer.step()
+
+        # Calculate metrics
+        running_loss += loss.item()
+        _, predicted = outputs.max(1)
+        total += labels.size(0)
+        correct += predicted.eq(labels).sum().item()
+
+        # Print statistics every 100 batches
+        if (i + 1) % 100 == 0:
+            print(f"Batch [{i + 1}/{len(train_dataset)}], Loss: {loss.item():.4f}")
+
+    train_loss = running_loss / len(train_dataset)
+    train_acc = 100.0 * correct / total
+
+    return train_loss, train_acc
+
+
+# Evaluation function
+def evaluate():
+    model.eval()
+    running_loss = 0.0
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for images, labels in test_dataset:
+            images, labels = (
+                torch.from_numpy(images).to(device),
+                torch.from_numpy(labels).to(device),
+            )
+
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+
+            running_loss += loss.item()
+            _, predicted = outputs.max(1)
+            total += labels.size(0)
+            correct += predicted.eq(labels).sum().item()
+
+    test_loss = running_loss / len(test_dataset)
+    test_acc = 100.0 * correct / total
+
+    return test_loss, test_acc
+
+
+# Main function to run everything
+def main():
+    global model, optimizer, scheduler, criterion, train_dataset, test_dataset
+
+    print("Starting training...")
+    best_acc = 0.0
+    for epoch in tqdm(range(num_epochs)):
+        start_time = time.time()
+
+        train_loss, train_acc = train_epoch()
+        test_loss, test_acc = evaluate()
+
+        # Update learning rate scheduler
+        # scheduler.step(test_acc)
+
+        # Save metrics
+        train_loss_history.append(train_loss)
+        train_acc_history.append(train_acc)
+        test_loss_history.append(test_loss)
+        test_acc_history.append(test_acc)
+
+        # Save best model
+        if test_acc > best_acc:
+            best_acc = test_acc
+            torch.save(model.state_dict(), "resnet18_cifar10_best.pth")
+
+        # Print epoch statistics
+        epoch_time = time.time() - start_time
+        print(
+            f"Epoch [{epoch + 1}/{num_epochs}], Time: {epoch_time:.2f}s, "
+            f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%, "
+            f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.2f}%, "
+            f"Best Acc: {best_acc:.2f}%"
+        )
+
+    # Plot training and validation curves
+    plt.figure(figsize=(12, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(train_loss_history, label="Train Loss")
+    plt.plot(test_loss_history, label="Test Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(train_acc_history, label="Train Accuracy")
+    plt.plot(test_acc_history, label="Test Accuracy")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy (%)")
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig("resnet18_cifar10_training.png")
+    plt.show()
+
+    print(f"Best Test Accuracy: {best_acc:.2f}%")
+
+
+# Run the main function
+if __name__ == "__main__":
+    main()
