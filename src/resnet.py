@@ -67,31 +67,82 @@ class BatchNorm(eqx.Module):
 
         running_mean, running_var = state.get(self.state_index)
 
-        batch_mean = jax.lax.pmean(x, axis_name=self.axis_name)
-        batch_size = jax.lax.psum(1, axis_name=self.axis_name)
+        input_shape = x.shape
+        ndim = len(input_shape)
 
-        if inference:
-            x_normalized = (x - running_mean) / jnp.sqrt(running_var + self.eps)
+        if ndim == 1:
+            batch_mean = jax.lax.pmean(x, axis_name=self.axis_name)
+            batch_size = jax.lax.psum(1, axis_name=self.axis_name)
+
+            if inference:
+                x_normalized = (x - running_mean) / jnp.sqrt(running_var + self.eps)
+            else:
+                xmu = x - batch_mean
+                sq = xmu**2
+                batch_var = jax.lax.pmean(sq, axis_name=self.axis_name)
+                std = jnp.sqrt(batch_var + self.eps)
+                x_normalized = xmu / std
+
+                correction_factor = batch_size / jnp.maximum(batch_size - 1, 1)
+                running_mean = (
+                    1 - self.momentum
+                ) * running_mean + self.momentum * batch_mean
+                running_var = (1 - self.momentum) * running_var + self.momentum * (
+                    batch_var * correction_factor
+                )
+
+                state = state.set(self.state_index, (running_mean, running_var))
         else:
-            xmu = x - batch_mean
-            sq = xmu**2
-            batch_var = jax.lax.pmean(sq, axis_name=self.axis_name)
-            std = jnp.sqrt(batch_var + self.eps)
-            x_normalized = xmu / std
+            spatial_axes = tuple(range(1, ndim))  # All dims except channel dim (0)
 
-            correction_factor = batch_size / jnp.maximum(batch_size - 1, 1)
-            running_mean = (
-                1 - self.momentum
-            ) * running_mean + self.momentum * batch_mean
-            running_var = (1 - self.momentum) * running_var + self.momentum * (
-                batch_var * correction_factor
-            )
+            if inference:
+                x_normalized = (
+                    x - running_mean.reshape((-1,) + (1,) * (ndim - 1))
+                ) / jnp.sqrt(running_var.reshape((-1,) + (1,) * (ndim - 1)) + self.eps)
+            else:
+                spatial_mean = jnp.mean(x, axis=spatial_axes)
 
-            state = state.set(self.state_index, (running_mean, running_var))
+                batch_mean = jax.lax.pmean(spatial_mean, axis_name=self.axis_name)
+                batch_size = jax.lax.psum(1, axis_name=self.axis_name)
+
+                broadcast_shape = (-1,) + (1,) * (ndim - 1)
+                batch_mean_broadcasted = batch_mean.reshape(broadcast_shape)
+
+                xmu = x - batch_mean_broadcasted
+                sq = xmu**2
+
+                spatial_var = jnp.mean(sq, axis=spatial_axes)
+                batch_var = jax.lax.pmean(spatial_var, axis_name=self.axis_name)
+
+                batch_var_broadcasted = batch_var.reshape(broadcast_shape)
+                std = jnp.sqrt(batch_var_broadcasted + self.eps)
+
+                x_normalized = xmu / std
+
+                spatial_size = 1
+                for dim in spatial_axes:
+                    spatial_size *= x.shape[dim]
+                total_size = batch_size * spatial_size
+
+                correction_factor = total_size / jnp.maximum(total_size - 1, 1)
+                running_mean = (
+                    1 - self.momentum
+                ) * running_mean + self.momentum * batch_mean
+                running_var = (1 - self.momentum) * running_var + self.momentum * (
+                    batch_var * correction_factor
+                )
+
+                state = state.set(self.state_index, (running_mean, running_var))
 
         out = x_normalized
         if self.affine and self.gamma is not None and self.beta is not None:
-            out = self.gamma * x_normalized + self.beta
+            if ndim > 1:
+                broadcast_shape = (-1,) + (1,) * (ndim - 1)
+                gamma_broadcasted = self.gamma.reshape(broadcast_shape)
+                beta_broadcasted = self.beta.reshape(broadcast_shape)
+                out = gamma_broadcasted * x_normalized + beta_broadcasted
+            else:
+                out = self.gamma * x_normalized + self.beta
 
         return out, state
 
